@@ -72,12 +72,32 @@ _cosmo_config_mkstubs() {
   done
 }
 
+_cosmo_config_cmake_toolchain() {
+  cat <<EOF
+# Target OS name. Close enough, I guess?
+set(CMAKE_SYSTEM_NAME Linux)
+
+# which C and C++ compiler to use
+set(CMAKE_C_COMPILER ${BINDIR}/cosmocc)
+set(CMAKE_CXX_COMPILER ${BINDIR}/cosmoc++)
+
+# location of the target environment
+set(CMAKE_FIND_ROOT_PATH ${COSMO_SYSROOT})
+
+# Probably not needed?
+#set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+EOF
+}
+
 _cosmo_config_main() {
   BINDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
   cosmo_config_preload || { echo "environment variables not properly configured" >&2; exit 1; }
   cosmo_config_cc_setenv
   [ "x$1" == "x--all" ] && set -- --cc --cxx --sysroot --cppflags --cflags --ldflags --ar
   [ "x$1" == "x--gen-stubs" ] && { _cosmo_config_mkstubs; exit 0; }
+  [ "x$1" == "x--cmake-toolchain" ] && { _cosmo_config_cmake_toolchain; exit 0; }
   for arg in $@; do
     case "$arg" in
       --version) _cosmo_config_version; exit 0;;
