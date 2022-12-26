@@ -28,6 +28,8 @@ cosmo_config_cc_setenv() {
     COSMOCXX="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-g++"
   [ -z "$COSMOAR" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
     COSMOAR="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-ar"
+  [ -z "$COSMORANLIB" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
+    COSMORANLIB="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-ranlib"
   [ -z "$COSMOLD" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
     COSMOLD="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-ld"
 
