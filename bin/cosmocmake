@@ -1,0 +1,15 @@
+#!/bin/sh
+# GCC wrapper for Cosmopolitan libc. Takes inspiration from `tool/scripts/cosmocc`.
+# SPDX-License-Identifier: CC0
+
+BINDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+
+. "$BINDIR/cosmo-config"
+cosmo_config_preload || { echo "$0: environment variables not properly configured" >&2; exit 1; }
+cosmo_config_cc_setenv
+
+[ -z "$TOOLCHAIN_FILE" ] && TOOLCHAIN_FILE="${COSMO_SYSROOT}/toolchain.cmake"
+[ ! -f "$TOOLCHAIN_FILE" ] && _cosmo_config_cmake_toolchain > "$TOOLCHAIN_FILE"
+
+set -- "${CMAKE:-cmake}" -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" "$@"
+exec "$@"
