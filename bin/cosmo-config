@@ -1,0 +1,98 @@
+#!/bin/sh
+# Loosely `pkg-config` inspired environment configuration script for cosmo-cross-sdk
+# SPDX-License-Identifier: CC0
+
+_COSMO_CONFIG_VERSION=1.0.0
+_COSMO_CONFIG_YEAR=2022
+_COSMO_CONFIG_AUTHOR="Ronsor Labs"
+
+cosmo_config_preload() {
+  [ -z "$COSMO_REPO" ] && [ -f "${BINDIR}/../etc/cosmo.env" ] && \
+    . "${BINDIR}/../etc/cosmo.env"
+  if [ -z "$COSMO_REPO" ]; then
+    COSMO_REPO="${BINDIR}/../usr/local/src/cosmopolitan"
+    [ -d "${COSMO_REPO}/ape" ] || return 1
+  fi
+  if [ -z "$COSMO_SYSROOT" ]; then
+    COSMO_SYSROOT="${BINDIR}/../usr/local/cosmo"
+    [ -d "$COSMO_SYSROOT" ] || return 1
+  fi
+  return 0
+}
+
+cosmo_config_cc_setenv() {
+  _COSMO_CONFIG_SETENV_OVERRIDE=false
+  [ -z "$COSMOCC" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
+    COSMOCC="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-gcc"
+  [ -z "$COSMOCXX" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
+    COSMOCXX="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-g++"
+  [ -z "$COSMOAR" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
+    COSMOAR="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-ar"
+  [ -z "$COSMOLD" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
+    COSMOLD="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-ld"
+
+  _COSMO_NDEBUG=""
+  [ "x$COSMO_NO_DEBUG" == "x1" ] && _COSMO_NDEBUG="-DNDEBUG"
+  _COSMO_OPTIMIZE=""
+  [ "x$COSMO_OPTIMIZE" == "x1" ] && _COSMO_OPTIMIZE="-O2"
+
+  COSMOCPPFLAGS="$_COSMO_NDEBUG -nostdinc -iquote ${COSMO_REPO} -isystem ${COSMO_SYSROOT}/include"
+  COSMOCPPFLAGS="$COSMOCPPFLAGS -isystem ${COSMO_REPO}/libc/isystem -include ${COSMO_REPO}/libc/integral/normalize.inc"
+
+  COSMOCFLAGS="-g $_COSMO_OPTIMIZE -fdata-sections -ffunction-sections -fno-pie -pg -mnop-mcount -fno-omit-frame-pointer"
+  COSMOCFLAGS="$COSMOCFLAGS -mno-tls-direct-seg-refs"
+
+  COSMOCXXFLAGS="-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics"
+
+  COSMOLDFLAGS="-static -no-pie -nostdlib -fuse-ld=bfd -Wl,-melf_x86_64 -Wl,--gc-sections -Wl,-z,max-page-size=0x1000"
+  COSMOLDFLAGS="$COSMOLDFLAGS -L${COSMO_SYSROOT}/lib -Wl,-T,${COSMO_REPO}/o/${COSMO_MODE}/ape/public/ape.lds"
+  [ ! -z "$COSMO_STUBS" ] && COSMOLDFLAGS="$COSMOLDFLAGS -L${COSMO_STUBS}/"
+  COSMOLDFLAGS="$COSMOLDFLAGS ${COSMO_REPO}/o/${COSMO_MODE}/ape/ape-no-modify-self.o"
+  COSMOLDFLAGS="$COSMOLDFLAGS ${COSMO_REPO}/o/${COSMO_MODE}/libc/crt/crt.o"
+
+  COSMOLDLIBS="${COSMO_REPO}/o/${COSMO_MODE}/cosmopolitan.a"
+  COSMOCXXLDLIBS="${COSMO_REPO}/o/${COSMO_MODE}/third_party/libcxx/libcxx.a"
+
+  COSMOCOBJFLAGS="-fno-omit-frame-pointer"
+}
+
+_cosmo_config_version() {
+  echo "cosmo-config ${_COSMO_CONFIG_VERSION} developed in ${_COSMO_CONFIG_YEAR} by ${_COSMO_CONFIG_AUTHOR}"
+  echo "host system: $(uname)"
+}
+
+_cosmo_config_mkstubs() {
+  [ $# -eq 0 ] && set -- c dl gcc_s m pthread resolv rt z stdc++
+  for lib; do
+    printf '\041\074\141\162\143\150\076\012' >${COSMO_STUBS:-${COSMO_SYSROOT}/lib}/lib$lib.a
+  done
+}
+
+_cosmo_config_main() {
+  BINDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+  cosmo_config_preload || { echo "environment variables not properly configured" >&2; exit 1; }
+  cosmo_config_cc_setenv
+  [ "x$1" == "x--all" ] && set -- --cc --cxx --sysroot --cppflags --cflags --ldflags --ar
+  [ "x$1" == "x--gen-stubs" ] && { _cosmo_config_mkstubs; exit 0; }
+  for arg in $@; do
+    case "$arg" in
+      --version) _cosmo_config_version; exit 0;;
+      -v) _cosmo_config_version; exit 0;;
+      --cosmocc) echo "COSMOCC=${COSMOCC}";;
+      --cosmocxx) echo "COSMOCXX=${COSMOCXX}";;
+      --cosmoar) echo "COSMOAR=${COSMOAR}";;
+      --cosmold) echo "COSMOLD=${COSMOLD}";;
+      --cc) echo "CC=${BINDIR}/cosmocc";;
+      --cxx) echo "CXX=${BINDIR}/cosmocxx";;
+      --ar) echo "AR=${BINDIR}/cosmoar";;
+      --sysroot) echo "SYSROOT=${COSMO_SYSROOT}";;
+      --cppflags) echo "CPPFLAGS=${COSMOCPPFLAGS}";;
+      --cflags) echo "CFLAGS=${COSMOCFLAGS}";;
+      --ldflags) echo "LDFLAGS=${COSMOLDFLAGS}";;
+      --ldlibs) echo "LDLIBS=${COSMOLDLIBS}";;
+      *) echo "unknown option: ${arg}" >&2;;
+    esac
+  done
+}
+
+[ "x$(basename "$0")" == "xcosmo-config" ] && { _cosmo_config_main "$@"; exit $?; }

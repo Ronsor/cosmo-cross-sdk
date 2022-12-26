@@ -1,0 +1,13 @@
+#!/bin/sh
+# GCC wrapper for Cosmopolitan libc. Takes inspiration from `tool/scripts/cosmocc`.
+# SPDX-License-Identifier: CC0
+
+BINDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+
+. "$BINDIR/cosmo-config"
+cosmo_config_preload || { echo "$0: environment variables not properly configured" >&2; exit 1; }
+cosmo_config_cc_setenv
+
+export _COSMOCXX_FORCE_LD=1
+set -- "$BINDIR/cosmoc++" "$@"
+exec "$@"

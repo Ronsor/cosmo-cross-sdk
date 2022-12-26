@@ -1,0 +1,51 @@
+#!/bin/sh
+# GCC wrapper for Cosmopolitan libc. Takes inspiration from `tool/scripts/cosmocc`.
+# SPDX-License-Identifier: CC0
+
+BINDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+
+. "$BINDIR/cosmo-config"
+cosmo_config_preload || { echo "$0: environment variables not properly configured" >&2; exit 1; }
+cosmo_config_cc_setenv
+
+[ "x$COSMO_ALLOW_WERROR" == "x1" ] && SKIP_WERROR=false || SKIP_WERROR=true
+[ "x$COSMO_ALLOW_PEDANTIC" == "x1" ] && SKIP_PEDANTIC=false || SKIP_PEDANTIC=true
+
+PREPROC_ONLY=false
+OBJECT_ONLY=false
+HAS_ONE_C=false
+HAS_ONE_SRC_FILE=false
+FIRST=true
+
+for arg; do
+  $FIRST && { FIRST=false; set --; }
+  [ "$arg" == "-Werror" ] && $SKIP_WERROR && continue
+  [ "$arg" == "-pedantic" ] && $SKIP_PEDANTIC && continue
+  [ "$arg" == "-fPIC" ] && continue # Not supported
+  if [ "x$_COSMOCXX_FORCE_LD" != "x1" ]; then
+    [ "$arg" == "-c" ] && OBJECT_ONLY=true
+    [ "$arg" == "-E" ] && PREPROC_ONLY=true
+    IS_SRC_FILE=true
+    case "$arg" in
+      *.c) HAS_ONE_C=true;;
+      -*) IS_SRC_FILE=false;;
+    esac
+    $IS_SRC_FILE && HAS_ONE_SRC_FILE=true
+  fi
+  set -- "$@" "$arg"
+done
+
+if $PREPROC_ONLY; then
+  set -- $COSMOCPPFLAGS "$@"
+elif $OBJECT_ONLY; then
+  set -- $COSMOCFLAGS $COSMOCPPFLAGS "$@"
+elif $HAS_ONE_C; then
+  set -- $COSMOCFLAGS $COSMOLDFLAGS $COSMOCPPFLAGS "$@" "-Wl,$COSMOCXXLDLIBS" "-Wl,$COSMOLDLIBS"
+elif $HAS_ONE_SRC_FILE; then
+  set -- $COSMOLDFLAGS $COSMOCPPFLAGS "$@" "-Wl,$COSMOCXXLDLIBS" "-Wl,$COSMOLDLIBS"
+else
+  set -- $COSMOCPPFLAGS "$@"
+fi
+
+set -- "$COSMOCXX" "$@"
+exec "$@"
