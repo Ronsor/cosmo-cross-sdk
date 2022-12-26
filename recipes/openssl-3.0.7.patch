@@ -1,0 +1,341 @@
+diff -ru a/openssl-3.0.7/crypto/bio/bio_addr.c b/openssl-3.0.7/crypto/bio/bio_addr.c
+--- a/openssl-3.0.7/crypto/bio/bio_addr.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/bio/bio_addr.c	2022-12-26 14:13:58.170651058 -0700
+@@ -654,11 +654,13 @@
+ {
+     int ret = 0;                 /* Assume failure */
+ 
+-    switch(family) {
+-    case AF_INET:
+ #ifdef AF_INET6
+-    case AF_INET6:
++    int ok_family = family != AF_INET6 ? family : AF_INET;
++    switch(ok_family) {
++#else
++    switch (family) {
+ #endif
++    case AF_INET:
+ #ifdef AF_UNIX
+     case AF_UNIX:
+ #endif
+diff -ru a/openssl-3.0.7/crypto/bio/bss_acpt.c b/openssl-3.0.7/crypto/bio/bss_acpt.c
+--- a/openssl-3.0.7/crypto/bio/bss_acpt.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/bio/bss_acpt.c	2022-12-26 14:17:01.040649541 -0700
+@@ -497,11 +497,6 @@
+                 *pp = data->cache_peer_serv;
+             } else if (num == 4) {
+                 switch (BIO_ADDRINFO_family(data->addr_iter)) {
+-#ifdef AF_INET6
+-                case AF_INET6:
+-                    ret = BIO_FAMILY_IPV6;
+-                    break;
+-#endif
+                 case AF_INET:
+                     ret = BIO_FAMILY_IPV4;
+                     break;
+@@ -509,6 +504,11 @@
+                     ret = data->accept_family;
+                     break;
+                 default:
++#ifdef AF_INET6
++                    if (BIO_ADDRINFO_family(data->addr_iter) == AF_INET6) {
++                        ret = BIO_FAMILY_IPV6;
++                    } else
++#endif
+                     ret = -1;
+                     break;
+                 }
+diff -ru a/openssl-3.0.7/crypto/bio/bss_conn.c b/openssl-3.0.7/crypto/bio/bss_conn.c
+--- a/openssl-3.0.7/crypto/bio/bss_conn.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/bio/bss_conn.c	2022-12-26 14:16:41.820649701 -0700
+@@ -422,11 +422,6 @@
+                 *pptr = (const char *)BIO_ADDRINFO_address(data->addr_iter);
+             } else if (num == 3) {
+                 switch (BIO_ADDRINFO_family(data->addr_iter)) {
+-# ifdef AF_INET6
+-                case AF_INET6:
+-                    ret = BIO_FAMILY_IPV6;
+-                    break;
+-# endif
+                 case AF_INET:
+                     ret = BIO_FAMILY_IPV4;
+                     break;
+@@ -434,6 +429,11 @@
+                     ret = data->connect_family;
+                     break;
+                 default:
++# ifdef AF_INET6
++                    if (BIO_ADDRINFO_family(data->addr_iter) == AF_INET6) {
++                        ret = BIO_FAMILY_IPV6;
++                    } else
++# endif
+                     ret = -1;
+                     break;
+                 }
+diff -ru a/openssl-3.0.7/crypto/bio/bss_dgram.c b/openssl-3.0.7/crypto/bio/bss_dgram.c
+--- a/openssl-3.0.7/crypto/bio/bss_dgram.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/bio/bss_dgram.c	2022-12-26 14:23:04.820646525 -0700
+@@ -360,8 +360,9 @@
+          */
+         ret = 28;
+         break;
++    default:
+ # if OPENSSL_USE_IPV6
+-    case AF_INET6:
++    if (BIO_ADDR_family(&data->peer) == AF_INET6) {
+         {
+ #  ifdef IN6_IS_ADDR_V4MAPPED
+             struct in6_addr tmp_addr;
+@@ -379,8 +380,8 @@
+             ret = 48;
+         }
+         break;
++    }
+ # endif
+-    default:
+         /* We don't know. Go with the historical default */
+         ret = 28;
+         break;
+@@ -460,15 +461,16 @@
+                                   &sockopt_val, sizeof(sockopt_val))) < 0)
+                 perror("setsockopt");
+             break;
++        default:
+ #  if OPENSSL_USE_IPV6 && defined(IPV6_MTU_DISCOVER) && defined(IPV6_PMTUDISC_DO)
+-        case AF_INET6:
++        if (addr.sa.sa_family == AF_INET6) {
+             sockopt_val = IPV6_PMTUDISC_DO;
+             if ((ret = setsockopt(b->num, IPPROTO_IPV6, IPV6_MTU_DISCOVER,
+                                   &sockopt_val, sizeof(sockopt_val))) < 0)
+                 perror("setsockopt");
+             break;
++        }
+ #  endif
+-        default:
+             ret = -1;
+             break;
+         }
+@@ -500,8 +502,9 @@
+                 ret = data->mtu;
+             }
+             break;
++        default:
+ #  if OPENSSL_USE_IPV6 && defined(IPV6_MTU)
+-        case AF_INET6:
++        if (addr.sa.sa_family == AF_INET6) {
+             if ((ret =
+                  getsockopt(b->num, IPPROTO_IPV6, IPV6_MTU,
+                             (void *)&sockopt_val, &sockopt_len)) < 0
+@@ -516,8 +519,8 @@
+                 ret = data->mtu;
+             }
+             break;
++        }
+ #  endif
+-        default:
+             ret = 0;
+             break;
+         }
+@@ -531,8 +534,9 @@
+         case AF_INET:
+             ret += 576;
+             break;
++        default:
+ # if OPENSSL_USE_IPV6
+-        case AF_INET6:
++        if (BIO_ADDR_family(&data->peer) == AF_INET6) {
+             {
+ #  ifdef IN6_IS_ADDR_V4MAPPED
+                 struct in6_addr tmp_addr;
+@@ -544,8 +548,8 @@
+                     ret += 1280;
+             }
+             break;
++        }
+ # endif
+-        default:
+             ret += 576;
+             break;
+         }
+@@ -733,8 +737,9 @@
+             ret = -1;
+ # endif
+             break;
++        default:
+ # if OPENSSL_USE_IPV6
+-        case AF_INET6:
++        if (data->peer.sa.sa_family == AF_INET6) {
+ #  if defined(IPV6_DONTFRAG)
+             if ((ret = setsockopt(b->num, IPPROTO_IPV6, IPV6_DONTFRAG,
+                                   (const void *)&sockopt_val,
+@@ -753,8 +758,8 @@
+             ret = -1;
+ #  endif
+             break;
++        }
+ # endif
+-        default:
+             ret = -1;
+             break;
+         }
+@@ -1850,6 +1855,7 @@
+ 
+ int BIO_dgram_non_fatal_error(int err)
+ {
++#if !defined(__COSMOPOLITAN__)
+     switch (err) {
+ # if defined(OPENSSL_SYS_WINDOWS)
+ #  if defined(WSAEWOULDBLOCK)
+@@ -1893,6 +1899,11 @@
+     default:
+         break;
+     }
++#else
++    if (err == EWOULDBLOCK || err == EINTR || err == EAGAIN || err == EPROTO ||
++        err == EINPROGRESS || err == EALREADY)
++        return 1;
++#endif
+     return 0;
+ }
+ 
+diff -ru a/openssl-3.0.7/crypto/bio/bss_fd.c b/openssl-3.0.7/crypto/bio/bss_fd.c
+--- a/openssl-3.0.7/crypto/bio/bss_fd.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/bio/bss_fd.c	2022-12-26 14:24:56.910645595 -0700
+@@ -237,6 +237,7 @@
+ 
+ int BIO_fd_non_fatal_error(int err)
+ {
++#if !defined(__COSMOPOLITAN__)
+     switch (err) {
+ 
+ # ifdef EWOULDBLOCK
+@@ -278,6 +279,11 @@
+     default:
+         break;
+     }
++#else
++    if (err == EWOULDBLOCK || err == EINTR || err == EAGAIN || err == EPROTO ||
++        err == EINPROGRESS || err == EALREADY || err == ENOTCONN)
++        return 1;
++#endif
+     return 0;
+ }
+ #endif
+diff -ru a/openssl-3.0.7/crypto/bio/bss_sock.c b/openssl-3.0.7/crypto/bio/bss_sock.c
+--- a/openssl-3.0.7/crypto/bio/bss_sock.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/bio/bss_sock.c	2022-12-26 14:25:24.240645368 -0700
+@@ -235,6 +235,7 @@
+ 
+ int BIO_sock_non_fatal_error(int err)
+ {
++#if !defined(__COSMOPOLITAN__)
+     switch (err) {
+ # if defined(OPENSSL_SYS_WINDOWS)
+ #  if defined(WSAEWOULDBLOCK)
+@@ -281,6 +282,11 @@
+     default:
+         break;
+     }
++#else
++    if (err == EWOULDBLOCK || err == EINTR || err == EAGAIN || err == EPROTO ||
++        err == EINPROGRESS || err == EALREADY || err == ENOTCONN)
++        return 1;
++#endif
+     return 0;
+ }
+ 
+diff -ru a/openssl-3.0.7/crypto/dso/dso_dlfcn.c b/openssl-3.0.7/crypto/dso/dso_dlfcn.c
+--- a/openssl-3.0.7/crypto/dso/dso_dlfcn.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/dso/dso_dlfcn.c	2022-12-26 14:30:49.130642674 -0700
+@@ -30,7 +30,8 @@
+ #  if defined(__SCO_VERSION__) || defined(_SCO_ELF) || \
+      (defined(__osf__) && !defined(RTLD_NEXT))     || \
+      (defined(__OpenBSD__) && !defined(RTLD_SELF)) || \
+-     defined(__ANDROID__) || defined(__TANDEM)
++     defined(__ANDROID__) || defined(__TANDEM) || \
++     defined(__COSMOPOLITAN__)
+ #   undef HAVE_DLINFO
+ #  endif
+ # endif
+diff -ru a/openssl-3.0.7/crypto/mem_sec.c b/openssl-3.0.7/crypto/mem_sec.c
+--- a/openssl-3.0.7/crypto/mem_sec.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/crypto/mem_sec.c	2022-12-26 14:34:11.690640994 -0700
+@@ -20,6 +20,9 @@
+ 
+ #include <string.h>
+ 
++/* TODO(ronsor): Cosmopolitan doesn't support mlock() */
++#define mlock(a, b) (0)
++
+ #ifndef OPENSSL_NO_SECURE_MEMORY
+ # if defined(_WIN32)
+ #  include <windows.h>
+diff -ru a/openssl-3.0.7/include/crypto/rand.h b/openssl-3.0.7/include/crypto/rand.h
+--- a/openssl-3.0.7/include/crypto/rand.h	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/include/crypto/rand.h	2022-12-26 14:45:56.580635149 -0700
+@@ -41,7 +41,7 @@
+  * default, we will try to read at least one of these files
+  */
+ # define DEVRANDOM "/dev/urandom", "/dev/random", "/dev/hwrng", "/dev/srandom"
+-# if defined(__linux) && !defined(__ANDROID__)
++# if defined(__linux) && !defined(__ANDROID__) && !defined(__COSMOPOLITAN__)
+ #  ifndef DEVRANDOM_WAIT
+ #   define DEVRANDOM_WAIT   "/dev/random"
+ #  endif
+diff -ru a/openssl-3.0.7/ssl/statem/statem_srvr.c b/openssl-3.0.7/ssl/statem/statem_srvr.c
+--- a/openssl-3.0.7/ssl/statem/statem_srvr.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/ssl/statem/statem_srvr.c	2022-12-26 14:48:25.710633912 -0700
+@@ -784,6 +784,7 @@
+ 
+ static ossl_inline int conn_is_closed(void)
+ {
++#if !defined(__COSMOPOLITAN__)
+     switch (get_last_sys_error()) {
+ #if defined(EPIPE)
+     case EPIPE:
+@@ -798,6 +799,12 @@
+         return 1;
+ #endif
+     default:
++#else
++    int err = get_last_sys_error();
++    if (err == EPIPE || err == ECONNRESET) {
++        return 1;
++    } else {
++#endif
+         return 0;
+     }
+ }
+diff -ru a/openssl-3.0.7/test/dtlsv1listentest.c b/openssl-3.0.7/test/dtlsv1listentest.c
+--- a/openssl-3.0.7/test/dtlsv1listentest.c	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/test/dtlsv1listentest.c	2022-12-26 15:12:15.750622053 -0700
+@@ -242,6 +242,9 @@
+      * VERIFY == 0 return value, HelloVerifyRequest sent
+      * DROP == 0 return value, no output
+      */
++#if defined(__COSMOPOLITAN__) /* Prevent symbol clash */
++#   define VERIFY DTLS_VERIFY
++#endif
+     enum {GOOD, VERIFY, DROP} outtype;
+ } tests;
+ 
+diff -ru a/openssl-3.0.7/test/testutil.h b/openssl-3.0.7/test/testutil.h
+--- a/openssl-3.0.7/test/testutil.h	2022-11-01 07:14:36.000000000 -0700
++++ b/openssl-3.0.7/test/testutil.h	2022-12-26 15:10:59.330622686 -0700
+@@ -318,6 +318,16 @@
+ DECLARE_COMPARISONS(long, long)
+ DECLARE_COMPARISONS(unsigned long, ulong)
+ DECLARE_COMPARISONS(double, double)
++
++/*
++ * Cosmopolitan libc does not provide a proper typedef for time_t, instead
++ * opting to #define it to int64_t. For the sake of the tests, we provide
++ * one here
++ */
++# if defined(__COSMOPOLITAN__)
++#  undef time_t
++   typedef int64_t time_t;
++# endif
+ DECLARE_COMPARISONS(time_t, time_t)
+ 
+ /*
