@@ -32,6 +32,8 @@ cosmo_config_cc_setenv() {
     COSMORANLIB="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-ranlib"
   [ -z "$COSMOLD" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
     COSMOLD="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-ld"
+  [ -z "$COSMOOBJCOPY" ] || $_COSMO_CONFIG_SETENV_OVERRIDE && \
+    COSMOOBJCOPY="${COSMO_REPO}/o/third_party/gcc/bin/x86_64-linux-musl-objcopy"
 
   _COSMO_NDEBUG=""
   [ "x$COSMO_NO_DEBUG" == "x1" ] && _COSMO_NDEBUG="-DNDEBUG"
