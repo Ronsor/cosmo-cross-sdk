@@ -1,0 +1,149 @@
+diff --git a/deps/hiredis/net.c b/deps/hiredis/net.c
+index 88f9aff25..12f21fa9f 100644
+--- a/deps/hiredis/net.c
++++ b/deps/hiredis/net.c
+@@ -277,16 +277,14 @@ int redisCheckConnectDone(redisContext *c, int *completed) {
+         *completed = 1;
+         return REDIS_OK;
+     }
+-    switch (errno) {
+-    case EISCONN:
++    if (errno == EISCONN) {
+         *completed = 1;
+         return REDIS_OK;
+-    case EALREADY:
+-    case EINPROGRESS:
+-    case EWOULDBLOCK:
++    } else if (errno == EALREADY || errno == EINPROGRESS ||
++               errno == EWOULDBLOCK) {
+         *completed = 0;
+         return REDIS_OK;
+-    default:
++    } else {
+         return REDIS_ERR;
+     }
+ }
+diff --git a/src/config.h b/src/config.h
+index 708925979..623a2f7a0 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -87,7 +87,7 @@
+ #endif
+ 
+ /* Test for polling API */
+-#ifdef __linux__
++#if defined(__linux__) && !defined(__COSMOPOLITAN__)
+ #define HAVE_EPOLL 1
+ #endif
+ 
+@@ -131,7 +131,7 @@
+ #endif
+ #endif
+ 
+-#if __GNUC__ >= 4
++#if __GNUC__ >= 4 && !defined(__COSMOPOLITAN__)
+ #define redis_unreachable __builtin_unreachable
+ #else
+ #define redis_unreachable abort
+diff --git a/src/debug.c b/src/debug.c
+index 43de7d2db..b7cb1a84e 100644
+--- a/src/debug.c
++++ b/src/debug.c
+@@ -1950,6 +1950,7 @@ void doFastMemoryTest(void) {
+  * bytes, searching for E8 (callq) opcodes, and dumping the symbols
+  * and the call offset if they appear to be valid. */
+ void dumpX86Calls(void *addr, size_t len) {
++#ifndef __COSMOPOLITAN__
+     size_t j;
+     unsigned char *p = addr;
+     Dl_info info;
+@@ -1972,9 +1973,11 @@ void dumpX86Calls(void *addr, size_t len) {
+             j += 4; /* Skip the 32 bit immediate. */
+         }
+     }
++#endif
+ }
+ 
+ void dumpCodeAroundEIP(void *eip) {
++#ifndef __COSMOPOLITAN__
+     Dl_info info;
+     if (dladdr(eip, &info) != 0) {
+         serverLog(LL_WARNING|LL_RAW,
+@@ -2002,6 +2005,7 @@ void dumpCodeAroundEIP(void *eip) {
+             dumpX86Calls(base, len);
+         }
+     }
++#endif
+ }
+ 
+ void invalidFunctionWasCalled() {}
+diff --git a/src/module.c b/src/module.c
+index 7fbc1d52b..118f425b4 100644
+--- a/src/module.c
++++ b/src/module.c
+@@ -12271,29 +12271,22 @@ NULL
+             addReply(c,shared.ok);
+         else {
+             char *errmsg;
+-            switch(errno) {
+-            case ENOENT:
++            if (errno == ENOENT) {
+                 errmsg = "no such module with that name";
+-                break;
+-            case EBUSY:
++            } else if (errno == EBUSY) {
+                 errmsg = "the module exports one or more module-side data "
+                          "types, can't unload";
+-                break;
+-            case EPERM:
++            } else if (errno == EPERM) {
+                 errmsg = "the module exports APIs used by other modules. "
+                          "Please unload them first and try again";
+-                break;
+-            case EAGAIN:
++            } else if (errno == EAGAIN) {
+                 errmsg = "the module has blocked clients. "
+                          "Please wait them unblocked and try again";
+-                break;
+-            case EINPROGRESS:
++            } else if (errno == EINPROGRESS) {
+                 errmsg = "the module holds timer that is not fired. "
+                          "Please stop the timer or wait until it fires.";
+-                break;
+-            default:
++            } else {
+                 errmsg = "operation not possible.";
+-                break;
+             }
+             addReplyErrorFormat(c,"Error unloading module: %s",errmsg);
+         }
+diff --git a/src/sentinel.c b/src/sentinel.c
+index 006d5141b..5dba43566 100644
+--- a/src/sentinel.c
++++ b/src/sentinel.c
+@@ -1715,8 +1715,7 @@ char *sentinelInstanceMapCommand(sentinelRedisInstance *ri, char *command) {
+ /* Generalise handling create instance error. Use SRI_MASTER, SRI_SLAVE or
+  * SRI_SENTINEL as a role value. */
+ const char *sentinelCheckCreateInstanceErrors(int role) {
+-    switch(errno) {
+-    case EBUSY:
++    if (errno == EBUSY) {
+         switch (role) {
+         case SRI_MASTER:
+             return "Duplicate master name.";
+@@ -1728,12 +1727,11 @@ const char *sentinelCheckCreateInstanceErrors(int role) {
+             serverAssert(0);
+             break;
+         }
+-        break;
+-    case ENOENT:
++    } else if (errno == ENOENT) {
+         return "Can't resolve instance hostname.";
+-    case EINVAL:
++    } else if (errno == EINVAL) {
+         return "Invalid port number.";
+-    default:
++    } else {
+         return "Unknown Error for creating instances.";
+     }
+ }
