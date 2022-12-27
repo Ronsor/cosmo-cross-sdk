@@ -22,6 +22,7 @@ for arg; do
   [ "$arg" == "-Werror" ] && $SKIP_WERROR && continue
   [ "$arg" == "-pedantic" ] && $SKIP_PEDANTIC && continue
   [ "$arg" == "-fPIC" ] && continue # Not supported
+  [ "$arg" == "-flto" ] && continue # Not supported
   if [ "x$_COSMOCXX_FORCE_LD" != "x1" ]; then
     [ "$arg" == "-c" ] && OBJECT_ONLY=true
     [ "$arg" == "-E" ] && PREPROC_ONLY=true
